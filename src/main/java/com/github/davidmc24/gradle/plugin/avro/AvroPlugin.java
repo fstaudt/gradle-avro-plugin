@@ -41,7 +41,6 @@ public class AvroPlugin implements Plugin<Project> {
         project.getPlugins().apply(JavaPlugin.class);
         project.getPlugins().apply(AvroBasePlugin.class);
         configureTasks(project);
-        configureIntelliJ(project);
     }
 
     private static void configureTasks(final Project project) {
@@ -50,36 +49,6 @@ public class AvroPlugin implements Plugin<Project> {
             TaskProvider<GenerateAvroJavaTask> javaTaskProvider = configureJavaGenerationTask(project, sourceSet, protoTaskProvider);
             configureTaskDependencies(project, sourceSet, javaTaskProvider);
         });
-    }
-
-    private static void configureIntelliJ(final Project project) {
-        project.getPlugins().withType(IdeaPlugin.class).configureEach(ideaPlugin -> {
-            SourceSet mainSourceSet = getMainSourceSet(project);
-            SourceSet testSourceSet = getTestSourceSet(project);
-            IdeaModule module = ideaPlugin.getModel().getModule();
-            module.setSourceDirs(new SetBuilder<File>()
-                .addAll(module.getSourceDirs())
-                .add(getAvroSourceDir(project, mainSourceSet))
-                .add(getGeneratedOutputDir(project, mainSourceSet, Constants.JAVA_EXTENSION).map(Directory::getAsFile).get())
-                .build());
-            GradleCompatibility.addTestSources(module,
-                getAvroSourceDir(project, testSourceSet),
-                getGeneratedOutputDir(project, testSourceSet, Constants.JAVA_EXTENSION).map(Directory::getAsFile).get()
-            );
-            // IntelliJ doesn't allow source directories beneath an excluded directory.
-            // Thus, we remove the build directory exclude and add all non-generated sub-directories as excludes.
-            SetBuilder<File> excludeDirs = new SetBuilder<>();
-            excludeDirs.addAll(module.getExcludeDirs()).remove(project.getBuildDir());
-            File buildDir = project.getBuildDir();
-            if (buildDir.isDirectory()) {
-                excludeDirs.addAll(project.getBuildDir().listFiles(new NonGeneratedDirectoryFileFilter()));
-            }
-            module.setExcludeDirs(excludeDirs.build());
-        });
-        project.getTasks().withType(GenerateIdeaModule.class).configureEach(generateIdeaModule ->
-            generateIdeaModule.doFirst(task ->
-                project.getTasks().withType(GenerateAvroJavaTask.class, generateAvroJavaTask ->
-                    project.mkdir(generateAvroJavaTask.getOutputDir().get()))));
     }
 
     private static TaskProvider<GenerateAvroProtocolTask> configureProtocolGenerationTask(final Project project,
